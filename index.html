@@ -407,61 +407,92 @@
 
     /* ── Filter bar ── */
     .filter-bar {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: white;
       display: flex; flex-direction: column; gap: 10px;
-      padding: 12px 16px; border-bottom: 1px solid var(--border); background: #f8fafc;
     }
-
-    /* Search */
     .search-row { display: flex; align-items: center; gap: 8px; }
     .search-input-wrap { position: relative; flex: 1; }
     .search-input-wrap .si {
-      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-      color: var(--text-muted); font-size: 0.85rem; pointer-events: none;
+      position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+      color: var(--text-muted); font-size: 0.82rem; pointer-events: none;
     }
     .search-input {
-      width: 100%; padding: 7px 30px 7px 30px;
+      width: 100%; padding: 8px 32px;
       border: 1.5px solid var(--border); border-radius: 8px;
-      font-size: 0.88rem; outline: none; background: white; transition: border-color 0.2s;
+      font-size: 0.88rem; outline: none; background: var(--bg);
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      color: var(--text);
     }
-    .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+    .search-input:focus {
+      border-color: var(--primary); background: white;
+      box-shadow: 0 0 0 3px rgba(79,70,229,0.08);
+    }
     .search-clear {
-      display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-      background: none; border: none; cursor: pointer; color: var(--text-muted);
-      font-size: 0.85rem; padding: 2px 4px; border-radius: 4px;
+      display: none; position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+      background: #e2e8f0; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 0.65rem;
+      width: 17px; height: 17px; border-radius: 50%;
+      align-items: center; justify-content: center; transition: background 0.15s;
     }
-    .search-clear.show { display: block; }
-    .search-clear:hover { background: var(--border); }
+    .search-clear.show { display: flex; }
+    .search-clear:hover { background: var(--text-muted); color: white; }
 
     /* Chips row */
     .chips-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
     .filter-label {
       font-size: 0.68rem; font-weight: 700; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; margin-right: 1px;
     }
-    .filter-divider { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; margin: 0 3px; }
+    .filter-divider { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; margin: 0 3px; }
+
+    /* Chip base */
+    .fc {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px; border-radius: 6px;
+      border: 1.5px solid var(--border); background: var(--bg);
+      font-size: 0.73rem; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; color: var(--text-muted); white-space: nowrap; user-select: none;
+    }
+    .fc:hover { border-color: var(--primary-light); color: var(--primary); background: white; }
+    .fc .cd { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Active chip variants */
+    .fc.ac-primary { background: var(--primary);  border-color: var(--primary);  color: white; }
+    .fc.ac-blue    { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; font-weight: 700; }
+    .fc.ac-green   { background: #dcfce7; border-color: #86efac; color: #15803d; font-weight: 700; }
+    .fc.ac-yellow  { background: #fef9c3; border-color: #fde047; color: #854d0e; font-weight: 700; }
+    .fc.ac-red     { background: #fee2e2; border-color: #fca5a5; color: #991b1b; font-weight: 700; }
+    .fc.ac-orange  { background: #ffedd5; border-color: #fdba74; color: #9a3412; font-weight: 700; }
+    .fc.ac-slate   { background: #f1f5f9; border-color: #cbd5e1; color: #475569; font-weight: 700; }
+
+    /* Period input */
     .filter-period-input {
-      padding: 3px 7px; border: 1.5px solid var(--border);
-      border-radius: 6px; font-size: 0.75rem; outline: none;
-      color: var(--text); background: white; cursor: pointer;
+      padding: 4px 8px; border: 1.5px solid var(--border); border-radius: 6px;
+      font-size: 0.73rem; outline: none; color: var(--text);
+      background: var(--bg); cursor: pointer; transition: all 0.15s;
     }
-    .filter-period-input:focus { border-color: var(--primary); }
-    .filter-period-input.has-value { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 600; }
+    .filter-period-input:focus { border-color: var(--primary); background: white; }
+    .filter-period-input.has-value {
+      border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 600;
+    }
 
     /* Reset + summary */
     .filter-reset-btn {
-      padding: 3px 9px; border: 1.5px solid #fca5a5;
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 9px; border: 1.5px solid #fca5a5;
       background: #fff5f5; color: var(--danger); border-radius: 6px;
       font-size: 0.72rem; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all 0.15s;
     }
-    .filter-reset-btn:hover { background: var(--danger); color: white; }
+    .filter-reset-btn:hover { background: var(--danger); color: white; border-color: var(--danger); }
     .filter-summary {
-      font-size: 0.75rem; color: var(--text-muted);
+      font-size: 0.73rem; color: var(--text-muted);
       display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     }
     .filter-active-badge {
-      background: var(--primary); color: white;
-      border-radius: 999px; padding: 1px 7px;
-      font-size: 0.68rem; font-weight: 700;
+      background: var(--primary); color: white; border-radius: 999px;
+      padding: 1px 7px; font-size: 0.67rem; font-weight: 700;
     }
 
     /* ── Overlap alert ── */
@@ -1151,100 +1182,87 @@
     const bar = document.getElementById('filter-bar');
     if (!bar) return;
 
-    // Simpan state search input agar tidak hilang saat re-render
     const prevFocused = document.activeElement?.id === 'search-project';
     const prevCursor  = prevFocused
-      ? document.getElementById('search-project')?.selectionStart
-      : null;
+      ? document.getElementById('search-project')?.selectionStart : null;
 
-    // Hitung jumlah per status
-    const sCounts = { all: projects.length };
+    const sc = { all: projects.length };
     Object.keys(STATUS_CONFIG).forEach(k => {
-      sCounts[k] = projects.filter(p => (p.status || 'pending') === k).length;
+      sc[k] = projects.filter(p => (p.status || 'pending') === k).length;
     });
 
-    // Hitung filter aktif
     const activeFilters = [
-      _searchQuery    !== '',
-      _statusFilter   !== 'all',
-      _severityFilter !== 'all',
-      _periodFilter   !== '',
+      _searchQuery !== '', _statusFilter !== 'all',
+      _severityFilter !== 'all', _periodFilter !== '',
     ].filter(Boolean).length;
-
     const filteredCount = applyFilters(projects).length;
 
     const statusDefs = [
-      { key: 'all',         label: 'Semua',            count: sCounts.all },
-      { key: 'pending',     label: '⏳ Pending',        count: sCounts.pending     || 0 },
-      { key: 'on_progress', label: '🔄 On Progress',    count: sCounts.on_progress || 0 },
-      { key: 'done',        label: '✅ Done',           count: sCounts.done        || 0 },
-      { key: 'hold',        label: '⏸ Hold',           count: sCounts.hold        || 0 },
+      { key: 'all',         label: 'Semua',       dot: '#94a3b8', ac: 'ac-primary', count: sc.all },
+      { key: 'pending',     label: 'Pending',     dot: '#94a3b8', ac: 'ac-slate',   count: sc.pending     || 0 },
+      { key: 'on_progress', label: 'On Progress', dot: '#3b82f6', ac: 'ac-blue',    count: sc.on_progress || 0 },
+      { key: 'done',        label: 'Done',        dot: '#10b981', ac: 'ac-green',   count: sc.done        || 0 },
+      { key: 'hold',        label: 'Hold',        dot: '#f59e0b', ac: 'ac-orange',  count: sc.hold        || 0 },
     ];
     const sevDefs = [
-      { key: 'all',    label: 'Semua'     },
-      { key: 'low',    label: '🟢 Low'    },
-      { key: 'medium', label: '🟡 Medium' },
-      { key: 'high',   label: '🔴 High'   },
+      { key: 'all',    label: 'Semua',  dot: '#94a3b8', ac: 'ac-primary' },
+      { key: 'low',    label: 'Low',    dot: '#10b981', ac: 'ac-green'   },
+      { key: 'medium', label: 'Medium', dot: '#f59e0b', ac: 'ac-yellow'  },
+      { key: 'high',   label: 'High',   dot: '#ef4444', ac: 'ac-red'     },
     ];
+
+    const chip = (isActive, acCls, dot, label, onclick, count) =>
+      `<button class="fc ${isActive ? acCls : ''}" onclick="${onclick}">
+        <span class="cd" style="background:${dot}"></span>
+        ${label}${count !== undefined
+          ? `<span style="opacity:0.65;font-size:0.67rem;margin-left:1px">(${count})</span>` : ''}
+      </button>`;
 
     bar.innerHTML = `
       <div class="search-row">
         <div class="search-input-wrap">
-          <span class="si">🔍</span>
+          <span class="si">⌕</span>
           <input type="text" class="search-input" id="search-project"
             placeholder="Cari nama project..."
             value="${escHtml(_searchQuery)}"
             oninput="setSearchQuery(this.value)" />
           <button class="search-clear ${_searchQuery ? 'show' : ''}"
-            id="search-clear-btn" onclick="clearSearch()" title="Hapus">✕</button>
+            id="search-clear-btn" onclick="clearSearch()">✕</button>
         </div>
         ${activeFilters > 0
-          ? `<button class="filter-reset-btn" onclick="resetAllFilters()">↺ Reset</button>`
-          : ''}
+          ? `<button class="filter-reset-btn" onclick="resetAllFilters()">↺ Reset</button>` : ''}
       </div>
 
       <div class="chips-row">
         <span class="filter-label">Status</span>
         ${statusDefs.map(f =>
-          `<button class="filter-btn ${_statusFilter === f.key ? 'active' : ''}"
-            onclick="setFilter('${f.key}')">${f.label} (${f.count})</button>`
+          chip(_statusFilter === f.key, f.ac, f.dot, f.label, `setFilter('${f.key}')`, f.count)
         ).join('')}
-
         <div class="filter-divider"></div>
-
         <span class="filter-label">Severity</span>
         ${sevDefs.map(f =>
-          `<button class="filter-btn ${_severityFilter === f.key ? 'active' : ''}"
-            onclick="setSeverityFilter('${f.key}')">${f.label}</button>`
+          chip(_severityFilter === f.key, f.ac, f.dot, f.label, `setSeverityFilter('${f.key}')`)
         ).join('')}
-
         <div class="filter-divider"></div>
-
         <span class="filter-label">Periode</span>
         <input type="month" class="filter-period-input ${_periodFilter ? 'has-value' : ''}"
           id="filter-period" value="${_periodFilter}"
           onchange="setPeriodFilter(this.value)"
-          title="Tampilkan project yang aktif pada bulan ini" />
+          title="Tampilkan project aktif di bulan ini" />
         ${_periodFilter
-          ? `<button class="filter-btn" style="padding:3px 7px;font-size:0.7rem"
-              onclick="setPeriodFilter('')" title="Hapus filter periode">✕</button>`
-          : ''}
+          ? `<button class="fc" onclick="setPeriodFilter('')" title="Hapus">✕</button>` : ''}
       </div>
 
       ${activeFilters > 0 ? `
-      <div class="filter-summary">
-        Menampilkan <strong>${filteredCount}</strong> dari <strong>${projects.length}</strong> project
-        <span class="filter-active-badge">${activeFilters} filter aktif</span>
-      </div>` : ''}
+        <div class="filter-summary">
+          Menampilkan <strong>${filteredCount}</strong> dari <strong>${projects.length}</strong> project
+          <span class="filter-active-badge">${activeFilters} filter aktif</span>
+        </div>` : ''}
     `;
 
-    // Kembalikan fokus ke search input jika sebelumnya sedang diketik
     if (prevFocused) {
       const inp = document.getElementById('search-project');
-      if (inp) {
-        inp.focus();
-        try { inp.setSelectionRange(prevCursor, prevCursor); } catch (_) {}
-      }
+      if (inp) { inp.focus(); try { inp.setSelectionRange(prevCursor, prevCursor); } catch (_) {} }
     }
   }
 
