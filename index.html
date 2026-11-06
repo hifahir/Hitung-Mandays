@@ -760,6 +760,16 @@
   let projects  = JSON.parse(localStorage.getItem('tsp_projects') || '[]');
   let calYear, calMonth;
 
+  // Status harus dideklarasikan di sini (sebelum init dipanggil)
+  const STATUS_CONFIG = {
+    pending:     { label: '⏳ Pending',     cls: 'badge-st-pending',     next: 'on_progress' },
+    on_progress: { label: '🔄 On Progress', cls: 'badge-st-on_progress', next: 'done'        },
+    done:        { label: '✅ Done',        cls: 'badge-st-done',        next: 'hold'        },
+    hold:        { label: '⏸ Hold',        cls: 'badge-st-hold',        next: 'pending'     },
+  };
+  let _statusFilter = 'all';
+  let _editId       = null;
+
   const SEVERITY_DAYS = { low: 30, medium: 30, high: 35 };
   const PROJECT_COLORS = [
     { bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
@@ -915,6 +925,9 @@
     renderProjects();
     renderCalendar();
     renderHolidayPanel();
+    // Pasang listener edit modal setelah seluruh DOM siap
+    const editMdEl = document.getElementById('edit-mandays-dev');
+    if (editMdEl) editMdEl.addEventListener('input', updateEditSitAkurasi);
   })();
 
   document.querySelectorAll('input[name="severity"]').forEach(r =>
@@ -1023,15 +1036,7 @@
   // ═══════════════════════════════════════════════════════
   //  STATUS & FILTER
   // ═══════════════════════════════════════════════════════
-  const STATUS_CONFIG = {
-    pending:     { label: '⏳ Pending',     cls: 'badge-st-pending',     next: 'on_progress' },
-    on_progress: { label: '🔄 On Progress', cls: 'badge-st-on_progress', next: 'done'        },
-    done:        { label: '✅ Done',        cls: 'badge-st-done',        next: 'hold'        },
-    hold:        { label: '⏸ Hold',        cls: 'badge-st-hold',        next: 'pending'     },
-  };
-
-  let _statusFilter = 'all';
-  let _editId       = null;
+  // (STATUS_CONFIG, _statusFilter, _editId sudah dideklarasikan di STATE & CONFIG)
 
   /** Klik status badge → cycle ke status berikutnya */
   function cycleStatus(id) {
@@ -1218,8 +1223,7 @@
   function handleEditOverlayClick(e) {
     if (e.target === document.getElementById('edit-overlay')) closeEditModal();
   }
-
-  document.getElementById('edit-mandays-dev').addEventListener('input', updateEditSitAkurasi);
+  // addEventListener untuk edit modal dipasang di init() setelah DOM siap
 
   // ═══════════════════════════════════════════════════════
   //  ADD / DELETE PROJECT
