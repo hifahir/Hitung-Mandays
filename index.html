@@ -407,17 +407,62 @@
 
     /* ── Filter bar ── */
     .filter-bar {
-      display: flex; gap: 6px; flex-wrap: wrap;
-      padding: 10px 16px; border-bottom: 1px solid var(--border); background: #f8fafc;
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); background: #f8fafc;
     }
-    .filter-btn {
-      padding: 4px 10px; border-radius: 999px;
-      border: 1.5px solid var(--border); background: white;
-      font-size: 0.73rem; font-weight: 600; cursor: pointer;
-      transition: all 0.15s; color: var(--text-muted); white-space: nowrap;
+
+    /* Search */
+    .search-row { display: flex; align-items: center; gap: 8px; }
+    .search-input-wrap { position: relative; flex: 1; }
+    .search-input-wrap .si {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--text-muted); font-size: 0.85rem; pointer-events: none;
     }
-    .filter-btn:hover  { border-color: var(--primary-light); color: var(--primary); }
-    .filter-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+    .search-input {
+      width: 100%; padding: 7px 30px 7px 30px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 0.88rem; outline: none; background: white; transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+    .search-clear {
+      display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--text-muted);
+      font-size: 0.85rem; padding: 2px 4px; border-radius: 4px;
+    }
+    .search-clear.show { display: block; }
+    .search-clear:hover { background: var(--border); }
+
+    /* Chips row */
+    .chips-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .filter-label {
+      font-size: 0.68rem; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+    }
+    .filter-divider { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; margin: 0 3px; }
+    .filter-period-input {
+      padding: 3px 7px; border: 1.5px solid var(--border);
+      border-radius: 6px; font-size: 0.75rem; outline: none;
+      color: var(--text); background: white; cursor: pointer;
+    }
+    .filter-period-input:focus { border-color: var(--primary); }
+    .filter-period-input.has-value { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 600; }
+
+    /* Reset + summary */
+    .filter-reset-btn {
+      padding: 3px 9px; border: 1.5px solid #fca5a5;
+      background: #fff5f5; color: var(--danger); border-radius: 6px;
+      font-size: 0.72rem; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .filter-reset-btn:hover { background: var(--danger); color: white; }
+    .filter-summary {
+      font-size: 0.75rem; color: var(--text-muted);
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .filter-active-badge {
+      background: var(--primary); color: white;
+      border-radius: 999px; padding: 1px 7px;
+      font-size: 0.68rem; font-weight: 700;
+    }
 
     /* ── Overlap alert ── */
     .overlap-alert {
@@ -767,8 +812,11 @@
     done:        { label: '✅ Done',        cls: 'badge-st-done',        next: 'hold'        },
     hold:        { label: '⏸ Hold',        cls: 'badge-st-hold',        next: 'pending'     },
   };
-  let _statusFilter = 'all';
-  let _editId       = null;
+  let _statusFilter   = 'all';
+  let _editId         = null;
+  let _searchQuery    = '';
+  let _severityFilter = 'all';
+  let _periodFilter   = '';
 
   const SEVERITY_DAYS = { low: 30, medium: 30, high: 35 };
   const PROJECT_COLORS = [
@@ -1102,21 +1150,150 @@
   function renderFilterBar() {
     const bar = document.getElementById('filter-bar');
     if (!bar) return;
-    const counts = { all: projects.length };
+
+    // Simpan state search input agar tidak hilang saat re-render
+    const prevFocused = document.activeElement?.id === 'search-project';
+    const prevCursor  = prevFocused
+      ? document.getElementById('search-project')?.selectionStart
+      : null;
+
+    // Hitung jumlah per status
+    const sCounts = { all: projects.length };
     Object.keys(STATUS_CONFIG).forEach(k => {
-      counts[k] = projects.filter(p => (p.status || 'pending') === k).length;
+      sCounts[k] = projects.filter(p => (p.status || 'pending') === k).length;
     });
-    const defs = [
-      { key: 'all',         label: `Semua (${counts.all})` },
-      { key: 'pending',     label: `⏳ Pending (${counts.pending || 0})` },
-      { key: 'on_progress', label: `🔄 On Progress (${counts.on_progress || 0})` },
-      { key: 'done',        label: `✅ Done (${counts.done || 0})` },
-      { key: 'hold',        label: `⏸ Hold (${counts.hold || 0})` },
+
+    // Hitung filter aktif
+    const activeFilters = [
+      _searchQuery    !== '',
+      _statusFilter   !== 'all',
+      _severityFilter !== 'all',
+      _periodFilter   !== '',
+    ].filter(Boolean).length;
+
+    const filteredCount = applyFilters(projects).length;
+
+    const statusDefs = [
+      { key: 'all',         label: 'Semua',            count: sCounts.all },
+      { key: 'pending',     label: '⏳ Pending',        count: sCounts.pending     || 0 },
+      { key: 'on_progress', label: '🔄 On Progress',    count: sCounts.on_progress || 0 },
+      { key: 'done',        label: '✅ Done',           count: sCounts.done        || 0 },
+      { key: 'hold',        label: '⏸ Hold',           count: sCounts.hold        || 0 },
     ];
-    bar.innerHTML = defs.map(f =>
-      `<button class="filter-btn ${_statusFilter === f.key ? 'active' : ''}"
-        onclick="setFilter('${f.key}')">${f.label}</button>`
-    ).join('');
+    const sevDefs = [
+      { key: 'all',    label: 'Semua'     },
+      { key: 'low',    label: '🟢 Low'    },
+      { key: 'medium', label: '🟡 Medium' },
+      { key: 'high',   label: '🔴 High'   },
+    ];
+
+    bar.innerHTML = `
+      <div class="search-row">
+        <div class="search-input-wrap">
+          <span class="si">🔍</span>
+          <input type="text" class="search-input" id="search-project"
+            placeholder="Cari nama project..."
+            value="${escHtml(_searchQuery)}"
+            oninput="setSearchQuery(this.value)" />
+          <button class="search-clear ${_searchQuery ? 'show' : ''}"
+            id="search-clear-btn" onclick="clearSearch()" title="Hapus">✕</button>
+        </div>
+        ${activeFilters > 0
+          ? `<button class="filter-reset-btn" onclick="resetAllFilters()">↺ Reset</button>`
+          : ''}
+      </div>
+
+      <div class="chips-row">
+        <span class="filter-label">Status</span>
+        ${statusDefs.map(f =>
+          `<button class="filter-btn ${_statusFilter === f.key ? 'active' : ''}"
+            onclick="setFilter('${f.key}')">${f.label} (${f.count})</button>`
+        ).join('')}
+
+        <div class="filter-divider"></div>
+
+        <span class="filter-label">Severity</span>
+        ${sevDefs.map(f =>
+          `<button class="filter-btn ${_severityFilter === f.key ? 'active' : ''}"
+            onclick="setSeverityFilter('${f.key}')">${f.label}</button>`
+        ).join('')}
+
+        <div class="filter-divider"></div>
+
+        <span class="filter-label">Periode</span>
+        <input type="month" class="filter-period-input ${_periodFilter ? 'has-value' : ''}"
+          id="filter-period" value="${_periodFilter}"
+          onchange="setPeriodFilter(this.value)"
+          title="Tampilkan project yang aktif pada bulan ini" />
+        ${_periodFilter
+          ? `<button class="filter-btn" style="padding:3px 7px;font-size:0.7rem"
+              onclick="setPeriodFilter('')" title="Hapus filter periode">✕</button>`
+          : ''}
+      </div>
+
+      ${activeFilters > 0 ? `
+      <div class="filter-summary">
+        Menampilkan <strong>${filteredCount}</strong> dari <strong>${projects.length}</strong> project
+        <span class="filter-active-badge">${activeFilters} filter aktif</span>
+      </div>` : ''}
+    `;
+
+    // Kembalikan fokus ke search input jika sebelumnya sedang diketik
+    if (prevFocused) {
+      const inp = document.getElementById('search-project');
+      if (inp) {
+        inp.focus();
+        try { inp.setSelectionRange(prevCursor, prevCursor); } catch (_) {}
+      }
+    }
+  }
+
+  /** Terapkan semua filter aktif ke daftar project */
+  function applyFilters(list) {
+    return list.filter(p => {
+      if (_statusFilter !== 'all' && (p.status || 'pending') !== _statusFilter) return false;
+      if (_severityFilter !== 'all' && p.severity !== _severityFilter)           return false;
+      if (_searchQuery && !p.name.toLowerCase().includes(_searchQuery.toLowerCase())) return false;
+      if (_periodFilter) {
+        const [fy, fm] = _periodFilter.split('-').map(Number);
+        const monthStart = `${_periodFilter}-01`;
+        const monthEnd   = toInputDate(new Date(fy, fm, 0)); // hari terakhir bulan
+        if (p.start > monthEnd || p.end < monthStart) return false;
+      }
+      return true;
+    });
+  }
+
+  function setSearchQuery(val) {
+    _searchQuery = val;
+    const btn = document.getElementById('search-clear-btn');
+    if (btn) btn.classList.toggle('show', val.length > 0);
+    renderProjects();
+  }
+
+  function clearSearch() {
+    _searchQuery = '';
+    const inp = document.getElementById('search-project');
+    if (inp) inp.value = '';
+    renderProjects();
+  }
+
+  function setSeverityFilter(val) {
+    _severityFilter = val;
+    renderProjects();
+  }
+
+  function setPeriodFilter(val) {
+    _periodFilter = val;
+    renderProjects();
+  }
+
+  function resetAllFilters() {
+    _searchQuery    = '';
+    _statusFilter   = 'all';
+    _severityFilter = 'all';
+    _periodFilter   = '';
+    renderProjects();
   }
 
   // ═══════════════════════════════════════════════════════
@@ -1311,9 +1488,7 @@
     renderFilterBar();
     renderOverlapAlert();
 
-    const filtered  = _statusFilter === 'all'
-      ? projects
-      : projects.filter(p => (p.status || 'pending') === _statusFilter);
+    const filtered  = applyFilters(projects);
 
     const overlapIds = getOverlapProjectIds();
 
