@@ -397,6 +397,44 @@
       header, .container > div:first-child, .summary-strip, .card:not(#calendar-section) { display: none !important; }
     }
 
+    /* ── Status badges ── */
+    .badge-st-pending     { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .badge-st-on_progress { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+    .badge-st-done        { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-st-hold        { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+    .badge-st-pending:hover,.badge-st-on_progress:hover,
+    .badge-st-done:hover,.badge-st-hold:hover { filter: brightness(0.93); }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      padding: 10px 16px; border-bottom: 1px solid var(--border); background: #f8fafc;
+    }
+    .filter-btn {
+      padding: 4px 10px; border-radius: 999px;
+      border: 1.5px solid var(--border); background: white;
+      font-size: 0.73rem; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; color: var(--text-muted); white-space: nowrap;
+    }
+    .filter-btn:hover  { border-color: var(--primary-light); color: var(--primary); }
+    .filter-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+    /* ── Overlap alert ── */
+    .overlap-alert {
+      margin: 10px 16px 0;
+      background: #fff7ed; border: 1px solid #fed7aa;
+      border-left: 3px solid #f59e0b; border-radius: 8px;
+      padding: 10px 14px; font-size: 0.8rem; color: #92400e;
+    }
+    .overlap-alert-title { font-weight: 700; margin-bottom: 4px; }
+    .overlap-alert ul { margin: 4px 0 0 16px; line-height: 2; }
+
+    /* ── Project item states ── */
+    .project-item.is-done .project-name  { text-decoration: line-through; opacity: 0.55; }
+    .project-item.is-done                { opacity: 0.72; }
+    .project-item.is-hold                { opacity: 0.65; }
+    .project-item.has-overlap            { border-left: 3px solid #f59e0b; }
+
     /* ── Holiday list panel ── */
     .holiday-month-list { font-size: 0.82rem; }
     .holiday-month-item {
@@ -584,6 +622,10 @@
           <button class="btn btn-sm btn-outline btn-danger" onclick="clearAll()">🗑️ Hapus Semua</button>
         </div>
       </div>
+      <!-- Filter bar -->
+      <div class="filter-bar" id="filter-bar"></div>
+      <!-- Overlap alert -->
+      <div id="overlap-alert"></div>
       <div id="project-list" class="project-list">
         <div class="empty-state" id="empty-state">
           <div class="icon">📭</div>
@@ -848,9 +890,14 @@
       const newEnd   = addWorkdays(newStart, p.mandays || getTotalTestingDays(p.severity, mandaysDev));
       const newHols  = countWeekdayHolidays(newStart, newEnd);
 
-      if (newStart !== p.start || newEnd !== p.end || !p.mandaysDev) {
+      if (newStart !== p.start || newEnd !== p.end || !p.mandaysDev || !p.status) {
         dirty = true;
-        return { ...p, inputStart: rawStart, start: newStart, end: newEnd, holidays: newHols, mandaysDev, sitAkurasi };
+        return {
+          ...p,
+          inputStart: rawStart, start: newStart, end: newEnd,
+          holidays: newHols, mandaysDev, sitAkurasi,
+          status: p.status || 'pending',   // ← data lama tidak punya status
+        };
       }
       return p;
     });
@@ -974,6 +1021,207 @@
   }
 
   // ═══════════════════════════════════════════════════════
+  //  STATUS & FILTER
+  // ═══════════════════════════════════════════════════════
+  const STATUS_CONFIG = {
+    pending:     { label: '⏳ Pending',     cls: 'badge-st-pending',     next: 'on_progress' },
+    on_progress: { label: '🔄 On Progress', cls: 'badge-st-on_progress', next: 'done'        },
+    done:        { label: '✅ Done',        cls: 'badge-st-done',        next: 'hold'        },
+    hold:        { label: '⏸ Hold',        cls: 'badge-st-hold',        next: 'pending'     },
+  };
+
+  let _statusFilter = 'all';
+  let _editId       = null;
+
+  /** Klik status badge → cycle ke status berikutnya */
+  function cycleStatus(id) {
+    const p = projects.find(x => x.id === id);
+    if (!p) return;
+    const cur  = p.status || 'pending';
+    p.status   = STATUS_CONFIG[cur]?.next || 'on_progress';
+    saveProjects();
+    renderProjects();
+  }
+
+  function setFilter(key) {
+    _statusFilter = key;
+    renderProjects();
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  OVERLAP DETECTION
+  // ═══════════════════════════════════════════════════════
+  /** Kembalikan semua pasangan project yang jadwalnya bertabrakan (hanya active: bukan done/hold) */
+  function detectOverlaps() {
+    const active = projects.filter(p => p.status !== 'done' && p.status !== 'hold');
+    const pairs  = [];
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        const a = active[i], b = active[j];
+        // YYYY-MM-DD strings bisa dibandingkan lexicographically
+        if (a.start <= b.end && b.start <= a.end) {
+          const os   = a.start > b.start ? a.start : b.start;
+          const oe   = a.end   < b.end   ? a.end   : b.end;
+          const days = getWorkdaysBetween(os, oe).length;
+          pairs.push({ a, b, days, overlapStart: os, overlapEnd: oe });
+        }
+      }
+    }
+    return pairs;
+  }
+
+  function getOverlapProjectIds() {
+    const ids = new Set();
+    detectOverlaps().forEach(({ a, b }) => { ids.add(a.id); ids.add(b.id); });
+    return ids;
+  }
+
+  function renderOverlapAlert() {
+    const el    = document.getElementById('overlap-alert');
+    if (!el) return;
+    const pairs = detectOverlaps();
+    if (!pairs.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div class="overlap-alert">
+        <div class="overlap-alert-title">⚠️ ${pairs.length} jadwal testing bertabrakan</div>
+        <ul>
+          ${pairs.map(({ a, b, days, overlapStart, overlapEnd }) =>
+            `<li><strong>${escHtml(a.name)}</strong> ↔ <strong>${escHtml(b.name)}</strong>
+             — overlap <strong>${days} hari kerja</strong>
+             (${formatDate(overlapStart)} s/d ${formatDate(overlapEnd)})</li>`
+          ).join('')}
+        </ul>
+      </div>`;
+  }
+
+  function renderFilterBar() {
+    const bar = document.getElementById('filter-bar');
+    if (!bar) return;
+    const counts = { all: projects.length };
+    Object.keys(STATUS_CONFIG).forEach(k => {
+      counts[k] = projects.filter(p => (p.status || 'pending') === k).length;
+    });
+    const defs = [
+      { key: 'all',         label: `Semua (${counts.all})` },
+      { key: 'pending',     label: `⏳ Pending (${counts.pending || 0})` },
+      { key: 'on_progress', label: `🔄 On Progress (${counts.on_progress || 0})` },
+      { key: 'done',        label: `✅ Done (${counts.done || 0})` },
+      { key: 'hold',        label: `⏸ Hold (${counts.hold || 0})` },
+    ];
+    bar.innerHTML = defs.map(f =>
+      `<button class="filter-btn ${_statusFilter === f.key ? 'active' : ''}"
+        onclick="setFilter('${f.key}')">${f.label}</button>`
+    ).join('');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  EDIT PROJECT
+  // ═══════════════════════════════════════════════════════
+  function editProject(id) {
+    _editId = id;
+    const p = projects.find(x => x.id === id);
+    if (!p) return;
+
+    document.getElementById('edit-name').value         = p.name;
+    document.getElementById('edit-mandays-dev').value  = p.mandaysDev || 30;
+    document.getElementById('edit-start').value        = p.inputStart || p.start;
+    const sevRadio = document.getElementById(`edit-sev-${p.severity}`);
+    if (sevRadio) sevRadio.checked = true;
+    updateEditSitAkurasi();
+    renderEditStatusSelector(p.status || 'pending');
+
+    document.getElementById('edit-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function renderEditStatusSelector(currentStatus) {
+    const container = document.getElementById('edit-status-selector');
+    container.innerHTML = '';
+    Object.entries(STATUS_CONFIG).forEach(([key, cfg]) => {
+      const btn = document.createElement('button');
+      btn.type       = 'button';
+      btn.className  = `btn btn-sm ${cfg.cls}`;
+      btn.style.cssText = 'border-radius:6px;font-size:0.78rem;justify-content:center;transition:outline 0.15s';
+      btn.textContent = cfg.label;
+      btn.dataset.status = key;
+      if (key === currentStatus) {
+        btn.style.outline = '2.5px solid #4f46e5';
+        btn.style.outlineOffset = '1px';
+        btn.dataset.selected = 'true';
+      }
+      btn.onclick = () => {
+        container.querySelectorAll('button').forEach(b => {
+          b.style.outline = '';
+          delete b.dataset.selected;
+        });
+        btn.style.outline      = '2.5px solid #4f46e5';
+        btn.style.outlineOffset = '1px';
+        btn.dataset.selected   = 'true';
+      };
+      container.appendChild(btn);
+    });
+  }
+
+  function getEditSelectedStatus() {
+    const btn = document.querySelector('#edit-status-selector button[data-selected="true"]');
+    return btn ? btn.dataset.status : 'pending';
+  }
+
+  function updateEditSitAkurasi() {
+    const val = getSitAkurasiDays(
+      Math.max(1, parseInt(document.getElementById('edit-mandays-dev').value) || 30)
+    );
+    document.getElementById('edit-sit-akurasi-val').textContent = val;
+  }
+
+  function saveEdit() {
+    const name       = document.getElementById('edit-name').value.trim();
+    const start      = document.getElementById('edit-start').value;
+    const sevEl      = document.querySelector('input[name="edit-severity"]:checked');
+    const sev        = sevEl ? sevEl.value : null;
+    const mandaysDev = Math.max(1, parseInt(document.getElementById('edit-mandays-dev').value) || 30);
+    const status     = getEditSelectedStatus();
+
+    if (!name)  { alert('Masukkan nama project!'); return; }
+    if (!start) { alert('Pilih tanggal mulai!');   return; }
+    if (!sev)   { alert('Pilih severity!');        return; }
+
+    const idx = projects.findIndex(p => p.id === _editId);
+    if (idx === -1) { closeEditModal(); return; }
+
+    const days   = getTotalTestingDays(sev, mandaysDev);
+    const d      = parseLocalDate(start);
+    while (!isWorkday(toInputDate(d))) d.setDate(d.getDate() + 1);
+    const actualStart = toInputDate(d);
+    const end         = addWorkdays(actualStart, days);
+    const holidays    = countWeekdayHolidays(actualStart, end);
+
+    projects[idx] = {
+      ...projects[idx],
+      name, inputStart: start, start: actualStart, end,
+      severity: sev, mandaysDev,
+      sitAkurasi: getSitAkurasiDays(mandaysDev),
+      mandays: days, holidays, status,
+    };
+    saveProjects();
+    closeEditModal();
+    renderProjects();
+    renderCalendar();
+  }
+
+  function closeEditModal() {
+    document.getElementById('edit-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+    _editId = null;
+  }
+
+  function handleEditOverlayClick(e) {
+    if (e.target === document.getElementById('edit-overlay')) closeEditModal();
+  }
+
+  document.getElementById('edit-mandays-dev').addEventListener('input', updateEditSitAkurasi);
+
+  // ═══════════════════════════════════════════════════════
   //  ADD / DELETE PROJECT
   // ═══════════════════════════════════════════════════════
   function addProject() {
@@ -1000,10 +1248,12 @@
       inputStart: start,
       start: actualStart,
       end, severity: sev,
-      mandaysDev,                        // ← mandays yang digunakan Dev
+      mandaysDev,
       sitAkurasi: getSitAkurasiDays(mandaysDev),
-      mandays: days,                     // total hari kerja testing
-      holidays, color
+      mandays: days,
+      holidays,
+      status: 'pending',   // ← default status
+      color
     });
     saveProjects();
     renderProjects();
@@ -1054,21 +1304,48 @@
     document.getElementById('stat-high').textContent  = projects.filter(p => p.severity === 'high').length;
     document.getElementById('stat-lm').textContent    = projects.filter(p => p.severity !== 'high').length;
 
-    list.querySelectorAll('.project-item').forEach(el => el.remove());
+    renderFilterBar();
+    renderOverlapAlert();
+
+    const filtered  = _statusFilter === 'all'
+      ? projects
+      : projects.filter(p => (p.status || 'pending') === _statusFilter);
+
+    const overlapIds = getOverlapProjectIds();
+
+    list.querySelectorAll('.project-item, .empty-filter').forEach(el => el.remove());
 
     if (!projects.length) { empty.style.display = ''; return; }
     empty.style.display = 'none';
 
+    if (!filtered.length) {
+      const msg = document.createElement('div');
+      msg.className = 'empty-filter';
+      msg.style.cssText = 'padding:24px;text-align:center;color:var(--text-muted);font-size:0.9rem';
+      msg.textContent = 'Tidak ada project dengan status ini.';
+      list.appendChild(msg);
+      return;
+    }
+
     const sevLabel = { low: '🟢 Low', medium: '🟡 Medium', high: '🔴 High' };
 
-    projects.forEach(p => {
+    filtered.forEach(p => {
+      const status     = p.status || 'pending';
+      const statusCfg  = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+      const hasOverlap = overlapIds.has(p.id);
+
       const item = document.createElement('div');
-      item.className = 'project-item';
+      item.className = 'project-item'
+        + (status === 'done'  ? ' is-done'     : '')
+        + (status === 'hold'  ? ' is-hold'     : '')
+        + (hasOverlap         ? ' has-overlap' : '');
+
       item.innerHTML = `
         <div class="project-info">
           <div style="display:flex;align-items:center;gap:8px">
             <span style="width:10px;height:10px;border-radius:3px;background:${p.color.text};flex-shrink:0;display:inline-block"></span>
             <span class="project-name">${escHtml(p.name)}</span>
+            ${hasOverlap ? '<span title="Jadwal bertabrakan dengan project lain" style="font-size:0.85rem">⚠️</span>' : ''}
           </div>
           <div class="project-meta">
             <span class="badge badge-${p.severity}">${sevLabel[p.severity]}</span>
@@ -1076,6 +1353,8 @@
               title="Mandays Dev">💻 Dev ${p.mandaysDev || 30}hk</span>
             <span class="badge badge-days">⏱ ${p.mandays} hari kerja</span>
             ${p.holidays > 0 ? `<span class="badge badge-holiday">🗓️ ${p.holidays} libur nasional</span>` : ''}
+            <span class="badge ${statusCfg.cls}" onclick="cycleStatus(${p.id})"
+              title="Status · Klik untuk ganti" style="cursor:pointer">${statusCfg.label}</span>
           </div>
           <div class="project-dates">
             <span>📅 ${formatDate(p.start)}</span>
@@ -1087,6 +1366,9 @@
           <button class="btn btn-sm" onclick="showTaskSchedule(${p.id})"
             style="background:#f0fdf4;color:#15803d;border:1px solid #86efac"
             title="Lihat jadwal task">📋 Task</button>
+          <button class="btn btn-sm" onclick="editProject(${p.id})"
+            style="background:#fefce8;color:#a16207;border:1px solid #fde047"
+            title="Edit project">✏️</button>
           <button class="btn btn-sm" onclick="jumpToProject(${p.id})"
             style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe"
             title="Lihat di kalender">📅</button>
@@ -1524,7 +1806,9 @@
     if (e.target === document.getElementById('modal-overlay')) closeModal();
   }
 
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeModal(); closeEditModal(); }
+  });
 
   function printTaskSchedule() {
     window.print();
@@ -1556,6 +1840,64 @@
     URL.revokeObjectURL(url);
   }
 </script>
+<!-- ── Edit Project Modal ── -->
+<div class="modal-overlay" id="edit-overlay" onclick="handleEditOverlayClick(event)">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div>
+        <h2>✏️ Edit Project</h2>
+        <div class="modal-subtitle">Ubah detail project yang sudah ditambahkan</div>
+      </div>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px 24px">
+
+      <div class="form-group">
+        <label for="edit-name">Nama Project</label>
+        <input type="text" id="edit-name" placeholder="Nama project" />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-mandays-dev">Mandays Dev</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input type="number" id="edit-mandays-dev" min="1" max="999"
+            style="width:100px;text-align:center;font-weight:700;font-size:1rem" />
+          <div style="font-size:0.82rem;color:#6d28d9;background:#ede9fe;border:1px solid #c4b5fd;border-radius:6px;padding:5px 10px;flex:1">
+            SIT Akurasi: <strong id="edit-sit-akurasi-val">12</strong> hari
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Severity</label>
+        <div class="severity-selector">
+          <input class="severity-option" type="radio" name="edit-severity" id="edit-sev-low"    value="low" />
+          <label for="edit-sev-low">🟢 Low</label>
+          <input class="severity-option" type="radio" name="edit-severity" id="edit-sev-medium" value="medium" />
+          <label for="edit-sev-medium">🟡 Medium</label>
+          <input class="severity-option" type="radio" name="edit-severity" id="edit-sev-high"   value="high" />
+          <label for="edit-sev-high">🔴 High</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-start">Tanggal Mulai Testing</label>
+        <input type="date" id="edit-start" />
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label>Status</label>
+        <div id="edit-status-selector" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="width:auto;padding:10px 24px" onclick="saveEdit()">💾 Simpan</button>
+      <button class="btn btn-outline" onclick="closeEditModal()">Batal</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════
      TASK SCHEDULE MODAL
 ═══════════════════════════════════════════════════════ -->
